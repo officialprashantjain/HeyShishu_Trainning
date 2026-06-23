@@ -1,51 +1,120 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import TraineeLayout from '@/components/common/TraineeLayout'
+import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Link from 'next/link'
-import { MdArrowBack, MdPlayCircle } from 'react-icons/md'
+import { MdArrowBack } from 'react-icons/md'
+import { courseService } from '@/services/courseService'
+import { showToast } from '@/utils/toast'
 
 export default function ModulePage() {
+  const params = useParams()
+  const courseId = params?.courseId
+  const moduleId = params?.moduleId
+
+  const [moduleData, setModuleData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchModule = async () => {
+      try {
+        if (!courseId || !moduleId) return
+        const data = await courseService.getModuleDetails(courseId, moduleId)
+        setModuleData(data)
+      } catch (error) {
+         showToast.error("Error loading module: " + error.message)
+      } finally {
+         setLoading(false)
+      }
+    }
+    fetchModule()
+  }, [courseId, moduleId])
+
+  if (loading) {
+    return (
+      <TraineeLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
+        </div>
+      </TraineeLayout>
+    )
+  }
+
+  if (!moduleData) {
+    return (
+      <TraineeLayout>
+        <div className="text-center py-20 text-neutral-500">Module not found.</div>
+      </TraineeLayout>
+    )
+  }
+
+  // Fallback video logic
+  let videoUrl = moduleData.mainVideo?.url
+  if (!videoUrl || videoUrl.trim() === '') {
+     videoUrl = "https://content-management-files.canva.com/e712a1dd-f5e6-4ca3-9265-b5c4c4cec99a/feature_ai-generated-video_promo-showcase_01.mp4"
+  }
+
   return (
     <TraineeLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Back Link */}
-        <Link href="/courses/c1" className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-500 hover:text-primary-600 transition-colors mb-2">
+        <Link href={`/courses/${courseId}`} className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-500 hover:text-primary-600 transition-colors mb-2">
           <MdArrowBack size={18} />
-          Back to Course
+          Back to Modules
         </Link>
         
-        {/* Video Player Dummy */}
-        <div className="w-full aspect-video bg-dark-950 rounded-2xl flex flex-col items-center justify-center text-white relative overflow-hidden shadow-xl">
-          <div className="absolute inset-0 bg-primary-500/10" />
-          <MdPlayCircle size={64} className="text-white/80 hover:text-white hover:scale-110 transition-all cursor-pointer z-10" />
-          <p className="mt-4 font-semibold z-10">Play Training Video</p>
+        {/* Video Player Section */}
+        <div className="aspect-video bg-dark-900 rounded-3xl overflow-hidden shadow-xl relative">
+           <video 
+             src={videoUrl} 
+             controls 
+             className="w-full h-full object-cover"
+             poster="https://example.com/thumbnail.png"
+           >
+             Your browser does not support the video tag.
+           </video>
         </div>
 
-        {/* Content Box */}
-        <div className="bg-white border border-neutral-200 rounded-2xl p-8 shadow-sm">
-          <h1 className="text-2xl font-bold text-neutral-900 mb-4">Module 1: Introduction to Child Development</h1>
-          <div className="prose prose-neutral max-w-none">
-            <p className="text-neutral-600 leading-relaxed">
-              Welcome to the first module of the Child Development Basics course. In this module, 
-              we will cover the foundational physiological milestones that infants and toddlers experience 
-              during their first 24 months. 
-            </p>
-            <p className="text-neutral-600 leading-relaxed mt-4">
-              Please watch the video above entirely. Once you have completed the video and read through 
-              any attached PDF materials, you may proceed to the Module MCQ Test. You must pass the test 
-              with a minimum score of 80% to unlock Module 2.
-            </p>
-          </div>
+        {/* Content Section */}
+        <Card className="p-8">
+           <h1 className="text-2xl font-bold text-neutral-900 mb-4">
+             {moduleData.title || "Module Details"}
+           </h1>
+           
+           <div className="space-y-6 text-neutral-700 leading-relaxed">
+             {moduleData.summary && (
+                <div>
+                   <p>{moduleData.summary}</p>
+                </div>
+             )}
 
-          <div className="mt-8 pt-6 border-t border-neutral-100 flex justify-end">
-            <Link href="/courses/c1/modules/m1/test">
-              <Button variant="primary">Take Module Test</Button>
-            </Link>
-          </div>
-        </div>
+             {moduleData.about && (
+                <div>
+                   <h3 className="font-semibold text-neutral-900 mb-1">About this module</h3>
+                   <p className="text-sm">{moduleData.about}</p>
+                </div>
+             )}
 
+             {moduleData.whyItMatters && (
+                <div>
+                   <h3 className="font-semibold text-neutral-900 mb-1">Why it matters</h3>
+                   <p className="text-sm">{moduleData.whyItMatters}</p>
+                </div>
+             )}
+           </div>
+
+           <hr className="my-8 border-neutral-100" />
+
+           <div className="flex justify-end">
+              <Button variant="primary" size="lg">
+                 Take Module Test
+              </Button>
+           </div>
+        </Card>
       </div>
     </TraineeLayout>
   )

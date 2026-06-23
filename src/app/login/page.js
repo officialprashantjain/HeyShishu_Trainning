@@ -1,13 +1,70 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { FaGraduationCap } from 'react-icons/fa'
 import { MdEmail, MdLock } from 'react-icons/md'
-import Link from 'next/link'
+import { authService } from '@/services/authService'
+import { storage } from '@/utils/storage'
+import { showToast } from '@/utils/toast'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  })
+
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!formData.email || !formData.password) {
+      return showToast.error("Please fill in both email and password")
+    }
+
+    setIsSubmitting(true)
+    const loaderId = showToast.loading("Signing you in...")
+
+    try {
+      // response directly contains JSON from the API backend
+      const response = await authService.login(formData)
+      showToast.dismiss(loaderId)
+      
+      if (response?.status === 'success' && response?.token) {
+        showToast.success("Login successful!")
+        
+        // 1. Save Token into Local Storage
+        storage.setToken(response.token)
+        
+        // 2. Save User Payload into Local Storage
+        if (response.data) {
+           storage.setUser(response.data)
+        }
+
+        // 3. Drive User directly to the Payment screen
+        router.push('/payment')
+      } else {
+         showToast.error("Authentication failed. No token received.")
+      }
+      
+    } catch (error) {
+      showToast.dismiss(loaderId)
+      showToast.error(error.message || "Invalid credentials. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4">
       
@@ -23,20 +80,28 @@ export default function LoginPage() {
         </div>
 
         <Card className="shadow-lg p-6">
-          <div className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <Input 
               label="Email Address" 
+              name="email"
               type="email" 
               placeholder="you@example.com"
-              leftIcon={<MdEmail size={20} />}
+              icon={<MdEmail size={20} />}
+              value={formData.email}
+              onChange={handleChange}
+              required
             />
             
             <div className="space-y-1">
               <Input 
                 label="Password" 
+                name="password"
                 type="password" 
                 placeholder="••••••••"
-                leftIcon={<MdLock size={20} />}
+                icon={<MdLock size={20} />}
+                value={formData.password}
+                onChange={handleChange}
+                required
               />
               <div className="text-right">
                 <a href="#" className="text-xs font-semibold text-primary-600 hover:text-primary-700">
@@ -45,10 +110,12 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Link href="/dashboard" className="block mt-6">
-              <Button variant="primary" className="w-full justify-center">Login</Button>
-            </Link>
-          </div>
+            <div className="mt-6">
+              <Button type="submit" variant="primary" className="w-full justify-center" disabled={isSubmitting}>
+                {isSubmitting ? "Logging in..." : "Login"}
+              </Button>
+            </div>
+          </form>
         </Card>
 
         <p className="text-center text-sm text-neutral-500 mt-6">

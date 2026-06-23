@@ -1,11 +1,85 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { MdPayment, MdCheckCircle } from 'react-icons/md'
-import Link from 'next/link'
+import { useAuth } from '@/context/AuthContext'
+import { paymentService } from '@/services/paymentService'
+import { showToast } from '@/utils/toast'
+import { storage } from '@/utils/storage'
 
 export default function PaymentPage() {
+  const router = useRouter()
+  const { user, loading } = useAuth()
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  useEffect(() => {
+    if (!loading && !user) {
+      showToast.error("Please login to access payment portal.")
+      router.push('/login')
+    }
+  }, [user, loading, router])
+
+  const handleDummyPayment = async () => {
+    if (!user) return
+    
+    setIsProcessing(true)
+    const initLoader = showToast.loading("Initiating secure connection...")
+    
+    try {
+      // 1. Initiate 
+      const initRes = await paymentService.initiatePayment(99900) // ₹999
+      const orderId = initRes.data?.orderId
+      
+      showToast.dismiss(initLoader)
+      
+      if (!orderId) {
+        throw new Error("Failed to generate order ID from backend")
+      }
+
+      const verifyLoader = showToast.loading("Processing Razorpay transaction...")
+      
+      // Simulate Razorpay popup delay 
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+
+      // 2. Verify with Dummy Payload
+      const verificationPayload = {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: "dummy_pay_" + Date.now(),
+        razorpay_signature: "dummy_signature"
+      }
+
+      const verifyRes = await paymentService.verifyPayment(verificationPayload)
+      showToast.dismiss(verifyLoader)
+      showToast.success("Payment verified! Your courses are now fully unlocked.")
+
+      // Update local storage user state to unlocked if returned
+      if (verifyRes.data?.trainee) {
+         storage.setUser(verifyRes.data.trainee)
+      }
+
+      // 3. Route to main dashboard
+      router.push('/dashboard')
+
+    } catch (error) {
+      showToast.dismiss(initLoader)
+      showToast.error(error.message)
+      setIsProcessing(false)
+    }
+  }
+
+  // Loading wrapper to prevent unauthenticated flash
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4">
       
@@ -42,12 +116,15 @@ export default function PaymentPage() {
           </Card.Body>
 
           <Card.Footer className="bg-neutral-50 flex-col gap-3">
-            <Link href="/dashboard" className="w-full">
-              <Button variant="primary" className="w-full justify-center py-3">
-                <MdPayment size={20} className="mr-2" />
-                Pay via Razorpay
-              </Button>
-            </Link>
+            <Button 
+                variant="primary" 
+                className="w-full justify-center py-3" 
+                onClick={handleDummyPayment}
+                disabled={isProcessing}
+            >
+              <MdPayment size={20} className="mr-2" />
+              {isProcessing ? "Processing via Razorpay..." : "Pay via Razorpay"}
+            </Button>
             <p className="text-center text-xs text-neutral-400 w-full">
               Secured by Razorpay • UPI, Cards, NetBanking supported
             </p>

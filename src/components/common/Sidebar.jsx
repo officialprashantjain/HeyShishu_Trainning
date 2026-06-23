@@ -40,8 +40,11 @@ const navItems = [
   },
 ]
 
+import { useAuth } from '@/context/AuthContext'
+
 export default function Sidebar({ isOpen, onClose }) {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
 
   const isActive = (href) =>
     pathname === href || pathname.startsWith(href + '/')
@@ -104,14 +107,17 @@ export default function Sidebar({ isOpen, onClose }) {
             T
           </div>
           <div className="min-w-0">
-            <p className="text-white text-sm font-semibold truncate">Trainee</p>
+            <p className="text-white text-sm font-semibold truncate">{user?.fullName || 'Trainee'}</p>
             <p className="text-neutral-400 text-xs truncate">In Training</p>
           </div>
         </div>
 
         <button
           className="flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer w-[calc(100%-1rem)] text-danger-400 hover:text-danger-300 hover:bg-danger-500/10"
-          onClick={() => {}}
+          onClick={() => {
+            onClose && onClose()
+            logout()
+          }}
         >
           <MdLogout size={18} />
           <span>Logout</span>
