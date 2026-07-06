@@ -9,11 +9,13 @@ import Button from '@/components/ui/Button'
 import { FaGraduationCap } from 'react-icons/fa'
 import { MdEmail, MdLock } from 'react-icons/md'
 import { authService } from '@/services/authService'
+import { useAuth } from '@/context/AuthContext'
 import { storage } from '@/utils/storage'
 import { showToast } from '@/utils/toast'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { setUser } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
@@ -49,6 +51,7 @@ export default function LoginPage() {
         // 2. Save User Payload into Local Storage
         if (response.data) {
            storage.setUser(response.data)
+           setUser(response.data)
         }
 
         // 3. Drive User directly to the Payment screen

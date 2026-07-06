@@ -18,7 +18,13 @@ export default function CoursesPage() {
     const loadCourses = async () => {
       try {
         const data = await courseService.getAllCourses()
-        setCourses(data?.courses || [])
+        const courseList =
+          data?.courses ||
+          data?.data?.courses ||
+          data?.courses?.data ||
+          data?.payload?.courses ||
+          []
+        setCourses(courseList)
       } catch (error) {
         showToast.error(error.message)
       } finally {
