@@ -213,6 +213,13 @@ export default function ModulePage() {
     return isMainVideoDone && areAllSubsDone
   })()
 
+  // ── Check if max attempts reached ───────────────────────────────
+  const hasReachedMaxAttempts = (() => {
+    const maxAttempts = moduleData?.test?.maxAttempts
+    const attemptCount = moduleData?.myModuleProgress?.testAttemptCount || 0
+    return maxAttempts && attemptCount >= maxAttempts
+  })()
+
   return (
     <TraineeLayout>
       <div className="max-w-4xl mx-auto space-y-6">
@@ -232,6 +239,8 @@ export default function ModulePage() {
             ref={videoRef}
             src={videoUrl}
             controls
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
             className="w-full h-full object-cover"
             onLoadedMetadata={handleLoadedMetadata}
             onPlay={handlePlay}
@@ -373,6 +382,17 @@ export default function ModulePage() {
                 <MdLock size={18} className="mr-2" />
                 Test Locked
               </Button>
+            </div>
+          ) : hasReachedMaxAttempts ? (
+            <div className="text-right flex flex-col items-end">
+              <p className="text-sm font-semibold text-neutral-500 mb-3 bg-neutral-100 px-4 py-2 rounded-lg inline-block">
+                You have reached the maximum attempts for this test.
+              </p>
+              <Link href={`/courses/${courseId}/modules/${moduleId}/test`}>
+                <Button variant="secondary" size="lg">
+                  Review Test Results
+                </Button>
+              </Link>
             </div>
           ) : (
             <Button variant="primary" size="lg" onClick={handleTakeTest} disabled={isCompleting}>

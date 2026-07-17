@@ -132,11 +132,14 @@ function TestsPageContent() {
   const [timeRemaining, setTimeRemaining] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState(null)
+  const [cycleStatus, setCycleStatus] = useState(null)
+  const [isRequestingReview, setIsRequestingReview] = useState(false)
 
   useEffect(() => {
     const fetchTestList = async () => {
       try {
         const data = await courseService.getAllCourses()
+        setCycleStatus(data?.cycleStatus || data?.data?.cycleStatus || 'training_in_progress')
         const courses = pickCourseList(data)
 
         const detailedCourses = await Promise.all(
@@ -183,6 +186,9 @@ function TestsPageContent() {
               const progressPercent = getProgressPercent(fullModule, item.moduleProgress)
               const moduleCompleted = isModuleCompleted(fullModule, item.moduleProgress)
               const testCompleted = isTestCompleted(fullModule, item.moduleProgress)
+              const testScore = fullModule?.myModuleProgress?.testScore
+              const testPassed = fullModule?.myModuleProgress?.testPassed
+              const testAttemptCount = fullModule?.myModuleProgress?.testAttemptCount || 0
 
               return {
                 ...item,
@@ -192,6 +198,9 @@ function TestsPageContent() {
                 progressPercent,
                 moduleCompleted,
                 testCompleted,
+                testScore,
+                testPassed,
+                testAttemptCount,
               }
             } catch {
               return {
@@ -200,6 +209,9 @@ function TestsPageContent() {
                 progressPercent: getProgressPercent(null, item.moduleProgress),
                 moduleCompleted: isModuleCompleted(null, item.moduleProgress),
                 testCompleted: isTestCompleted(null, item.moduleProgress),
+                testScore: undefined,
+                testPassed: undefined,
+                testAttemptCount: 0,
               }
             }
           })
@@ -272,6 +284,20 @@ function TestsPageContent() {
     }))
   }
 
+  const handleRequestReview = async () => {
+    try {
+      setIsRequestingReview(true)
+      const res = await courseService.requestReview()
+      const newStatus = res?.data?.cycleStatus || res?.cycleStatus || 'review_requested'
+      setCycleStatus(newStatus)
+      showToast.success(res?.message || 'Review request submitted successfully.')
+    } catch (error) {
+      showToast.error(`Failed to request review: ${error.message}`)
+    } finally {
+      setIsRequestingReview(false)
+    }
+  }
+
   const handleSubmitTest = async () => {
     if (!courseId || !moduleId || !test || isSubmitting || submissionResult) return
 
@@ -337,10 +363,34 @@ function TestsPageContent() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="blue" dot>{availableCount} Ready</Badge>
-              <Badge variant="green" dot>{completedCount} Completed</Badge>
-              <Badge variant="gray" dot>{testItems.length} Total</Badge>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="blue" dot>{availableCount} Ready</Badge>
+                <Badge variant="green" dot>{completedCount} Completed</Badge>
+                <Badge variant="gray" dot>{testItems.length} Total</Badge>
+              </div>
+
+              {cycleStatus && cycleStatus !== 'training_in_progress' && (
+                <div className="ml-0 sm:ml-4 border-t sm:border-t-0 sm:border-l border-neutral-200 pt-3 sm:pt-0 sm:pl-4">
+                  {cycleStatus === 'training_completed' ? (
+                    <Button 
+                      variant="primary" 
+                      onClick={handleRequestReview} 
+                      disabled={isRequestingReview}
+                    >
+                      {isRequestingReview ? 'Requesting...' : 'Request for Review'}
+                    </Button>
+                  ) : cycleStatus === 'review_requested' ? (
+                    <Button variant="ghost" disabled className="bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Review Requested ✓
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" disabled className="bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Counselor Assigned ✓
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -355,9 +405,13 @@ function TestsPageContent() {
             <div className="space-y-3">
               {testItems.map((item) => {
                 const isLocked = !item.moduleCompleted
-                const actionLabel = item.testCompleted ? 'Review Test' : 'Take Test'
-                const actionHref = `/tests?courseId=${item.courseId}&moduleId=${item.moduleId}${item.testCompleted ? '&mode=review' : ''}`
-                const status = item.testCompleted
+                const maxAttempts = item.test?.maxAttempts
+                const hasReachedMaxAttempts = maxAttempts && item.testAttemptCount >= maxAttempts
+                const actionLabel = hasReachedMaxAttempts ? 'Review Results' : item.testCompleted ? 'Review Test' : 'Take Test'
+                const actionHref = `/tests?courseId=${item.courseId}&moduleId=${item.moduleId}${hasReachedMaxAttempts || item.testCompleted ? '&mode=review' : ''}`
+                const status = hasReachedMaxAttempts
+                  ? { label: 'Max Attempts', variant: 'danger' }
+                  : item.testCompleted
                   ? { label: 'Test Done', variant: 'green' }
                   : item.moduleCompleted
                   ? { label: 'Ready', variant: 'blue' }
@@ -402,6 +456,22 @@ function TestsPageContent() {
                             style={{ width: `${Math.min(100, item.progressPercent)}%` }}
                           />
                         </div>
+                        {item.testAttemptCount > 0 && item.testScore !== undefined && (
+                          <div className="flex justify-between text-xs mt-2 mb-1">
+                            <span className="font-medium text-neutral-600">Test Score</span>
+                            <span className={`font-bold ${item.testPassed ? 'text-success-600' : 'text-danger-600'}`}>
+                              {item.testScore}%
+                            </span>
+                          </div>
+                        )}
+                        {item.testAttemptCount > 0 && item.testScore !== undefined && (
+                          <div className="h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${item.testPassed ? 'bg-success-500' : 'bg-danger-500'}`}
+                              style={{ width: `${Math.min(100, item.testScore)}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-2 lg:items-end">

@@ -83,4 +83,13 @@ export const courseService = {
       return null;
     }
   },
+
+  requestReview: async () => {
+    try {
+      const response = await axiosInstance.post(API_ENDPOINTS.TRAINEE.REQUEST_REVIEW);
+      return unwrapData(response);
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to request review');
+    }
+  },
 };

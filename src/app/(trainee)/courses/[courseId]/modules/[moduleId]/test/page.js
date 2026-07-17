@@ -31,6 +31,7 @@ export default function TestPage() {
   const [timeRemaining, setTimeRemaining] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState(null)
+  const [isReviewMode, setIsReviewMode] = useState(false)
 
   useEffect(() => {
     const fetchModule = async () => {
@@ -45,6 +46,15 @@ export default function TestPage() {
         setSelectedAnswers({})
         setSubmissionResult(null)
         setTimeRemaining((normalizedModule?.test?.timeLimitMinutes || 0) * 60)
+
+        // Check if user has reached max attempts
+        const maxAttempts = normalizedModule?.test?.maxAttempts
+        const attemptCount = normalizedModule?.myModuleProgress?.testAttemptCount || 0
+        if (maxAttempts && attemptCount >= maxAttempts) {
+          setIsReviewMode(true)
+        } else {
+          setIsReviewMode(false)
+        }
       } catch (error) {
         showToast.error(`Error loading test: ${error.message}`)
       } finally {
@@ -163,6 +173,71 @@ export default function TestPage() {
           <Link href={`/courses/${courseId}`}>
             <Button variant="primary">Back to Module</Button>
           </Link>
+        </div>
+      </TraineeLayout>
+    )
+  }
+
+  // Show review screen if max attempts reached
+  if (isReviewMode) {
+    const testScore = moduleData?.myModuleProgress?.testScore
+    const attemptCount = moduleData?.myModuleProgress?.testAttemptCount || 0
+    const maxAttempts = test?.maxAttempts || 0
+    const testPassed = moduleData?.myModuleProgress?.testPassed
+
+    return (
+      <TraineeLayout>
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="bg-primary-50 p-6 border border-primary-100 rounded-xl text-center">
+            <h1 className="font-bold text-primary-900 text-xl mb-2">{test?.title || 'Module Test'}</h1>
+            <p className="text-sm text-primary-600">Test Review</p>
+          </div>
+
+          <Card className="border-neutral-200">
+            <Card.Body className="text-center space-y-6 py-8">
+              <div className="w-20 h-20 mx-auto bg-primary-100 rounded-full flex items-center justify-center">
+                <MdAssignment size={40} className="text-primary-600" />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-neutral-900 mb-2">Maximum Attempts Reached</h2>
+                <p className="text-neutral-600">
+                  You have used all {maxAttempts} attempts for this test.
+                </p>
+              </div>
+
+              <div className="bg-neutral-50 rounded-xl p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-neutral-600">Attempts Used</span>
+                  <span className="font-bold text-neutral-900">{attemptCount} / {maxAttempts}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-neutral-600">Your Score</span>
+                  <span className={`font-bold ${testPassed ? 'text-success-600' : 'text-danger-600'}`}>
+                    {testScore ?? 'N/A'}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-neutral-600">Status</span>
+                  <Badge variant={testPassed ? 'success' : 'danger'}>
+                    {testPassed ? 'Passed' : 'Not Passed'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="text-sm text-neutral-500">
+                <p>You cannot retake this test. Contact your instructor if you need assistance.</p>
+              </div>
+            </Card.Body>
+          </Card>
+
+          <div className="flex justify-start">
+            <Link href={`/courses/${courseId}/modules/${moduleId}`}>
+              <Button variant="ghost" icon={<MdArrowBack />}>
+                Back to Module
+              </Button>
+            </Link>
+          </div>
         </div>
       </TraineeLayout>
     )

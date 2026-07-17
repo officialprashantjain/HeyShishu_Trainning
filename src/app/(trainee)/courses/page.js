@@ -13,11 +13,16 @@ import { showToast } from '@/utils/toast'
 export default function CoursesPage() {
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cycleStatus, setCycleStatus] = useState('training_in_progress')
+  const [isRequesting, setIsRequesting] = useState(false)
 
   useEffect(() => {
     const loadCourses = async () => {
       try {
         const data = await courseService.getAllCourses()
+        const cStatus = data?.cycleStatus || data?.data?.cycleStatus || data?.payload?.cycleStatus || 'training_in_progress'
+        setCycleStatus(cStatus)
+
         const courseList =
           data?.courses ||
           data?.data?.courses ||
@@ -44,16 +49,80 @@ export default function CoursesPage() {
     )
   }
 
+  const handleRequestReview = async () => {
+    try {
+      setIsRequesting(true)
+      const response = await courseService.requestReview()
+      const newStatus = response?.data?.cycleStatus || response?.cycleStatus || 'review_requested'
+      setCycleStatus(newStatus)
+      showToast.success(response?.message || 'Review request submitted successfully.')
+    } catch (error) {
+      showToast.error(error.message)
+    } finally {
+      setIsRequesting(false)
+    }
+  }
+
+  const renderReviewButton = () => {
+    if (cycleStatus === 'training_in_progress') return null
+
+    if (cycleStatus === 'training_completed') {
+      return (
+        <Button 
+          onClick={handleRequestReview}
+          disabled={isRequesting}
+          className="bg-success-600 hover:bg-success-700 text-white border-0"
+        >
+          {isRequesting ? 'Requesting...' : 'Request for Review'}
+        </Button>
+      )
+    }
+
+    if (cycleStatus === 'review_requested') {
+      return (
+        <Button disabled variant="outline" className="opacity-70 bg-neutral-100 cursor-not-allowed">
+          Review Requested ✓
+        </Button>
+      )
+    }
+
+    if (cycleStatus === 'under_review') {
+      return (
+        <Button disabled variant="outline" className="opacity-70 bg-neutral-100 cursor-not-allowed">
+          Counselor Assigned ✓
+        </Button>
+      )
+    }
+
+    if (cycleStatus === 'approved') {
+      return (
+        <Button disabled variant="outline" className="opacity-70 bg-neutral-100 cursor-not-allowed">
+          Approved ✓
+        </Button>
+      )
+    }
+
+    // fallback for 'under_review' or later
+    return (
+      <Button disabled variant="outline" className="opacity-70 bg-neutral-100 cursor-not-allowed">
+        Counselor Assigned ✓
+      </Button>
+    )
+  }
+
   return (
     <TraineeLayout>
       <div className="max-w-6xl mx-auto space-y-6">
         
         {/* Page Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">My Courses</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            Complete all assigned courses to become eligible for the counselor review.
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">My Courses</h1>
+            <p className="text-sm text-neutral-500 mt-1">
+              Complete all assigned courses to become eligible for the counselor review.
+            </p>
+          </div>
+          {renderReviewButton()}
         </div>
 
         {courses.length === 0 ? (

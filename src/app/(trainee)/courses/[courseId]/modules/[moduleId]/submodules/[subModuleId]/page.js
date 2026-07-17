@@ -203,6 +203,8 @@ export default function SubModulePage() {
             ref={videoRef}
             src={videoUrl}
             controls
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
             className="w-full h-full object-cover"
             onLoadedMetadata={handleLoadedMetadata}
             onPlay={handlePlay}

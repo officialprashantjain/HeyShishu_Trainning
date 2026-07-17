@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   TRAINEE: {
     PROFILE: '/trainee/profile',
     UPDATE_PROFILE: '/trainee/profile/update',
+    REQUEST_REVIEW: '/trainee/request-review',
     // Additional trainee specific endpoints...
   },
   PAYMENT: {
