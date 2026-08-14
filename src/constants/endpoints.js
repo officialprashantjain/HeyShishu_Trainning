@@ -17,8 +17,8 @@ export const API_ENDPOINTS = {
     // Additional trainee specific endpoints...
   },
   PAYMENT: {
-    INITIATE: '/trainee/payment/initiate',
-    VERIFY: '/trainee/payment/verify',
+    CREATE_ORDER: '/payment/create-order',
+    VERIFY: '/payment/verify',
   },
   COURSES: {
     GET_ALL: '/trainee/courses',

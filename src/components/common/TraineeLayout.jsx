@@ -7,6 +7,7 @@ import { showToast } from '@/utils/toast'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import Footer from './Footer'
+import PaymentLockOverlay from '@/components/common/PaymentLockOverlay'
 
 /**
  * TraineeLayout — the main shell for all protected trainee pages.
@@ -48,9 +49,11 @@ export default function TraineeLayout({ children, title, subtitle }) {
 
       {/* Scrollable main content */}
       <div className="pt-16 lg:ml-[240px] min-h-screen bg-neutral-100 flex-1 flex flex-col">
-        <main className="p-4 md:p-6 w-full max-w-7xl mx-auto flex-1">
-          {children}
-        </main>
+        <PaymentLockOverlay>
+          <main className="p-4 md:p-6 w-full max-w-7xl mx-auto flex-1">
+            {children}
+          </main>
+        </PaymentLockOverlay>
         <Footer />
       </div>
     </div>

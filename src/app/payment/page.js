@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Script from 'next/script'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { MdPayment, MdCheckCircle } from 'react-icons/md'
@@ -22,45 +23,76 @@ export default function PaymentPage() {
     }
   }, [user, loading, router])
 
-  const handleDummyPayment = async () => {
+  const handlePayment = async () => {
     if (!user) return
 
     setIsProcessing(true)
     const initLoader = showToast.loading('Initiating secure connection...')
 
     try {
-      const initRes = await paymentService.initiatePayment(99900)
-      const orderId = initRes?.orderId
+      // 1. Create order on backend dynamically
+      const initRes = await paymentService.createOrder(user._id)
+      
+      const { razorpayOrderId, amount, key } = initRes?.data || {}
 
       showToast.dismiss(initLoader)
 
-      if (!orderId) {
-        throw new Error('Failed to generate order ID from backend')
+      if (!razorpayOrderId) {
+        throw new Error('Failed to generate secure order ID from backend')
       }
 
-      const verifyLoader = showToast.loading('Processing Razorpay transaction...')
+      // 2. Open Razorpay Checkout overlay
+      const options = {
+        key: key,
+        amount: amount, // Amount is in paise
+        currency: "INR",
+        name: "HeyShishu",
+        description: "Training Certification Fee",
+        order_id: razorpayOrderId,
+        prefill: {
+          name: user.fullName || "",
+          email: user.email || "",
+          contact: user.phoneNumber || ""
+        },
+        theme: {
+          color: "#346960"
+        },
+        handler: async function (response) {
+          const verifyLoader = showToast.loading('Verifying secure payment...')
+          try {
+            const verificationPayload = {
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            }
 
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+            await paymentService.verifyPayment(verificationPayload)
+            showToast.dismiss(verifyLoader)
+            showToast.success('Payment verified! Your courses are now fully unlocked.')
+            
+            // Advance status immediately for fluid UI interaction
+            const updatedUser = { ...user, paymentStatus: 'paid', status: 'pending_training' }
+            storage.setUser(updatedUser)
+            setUser(updatedUser)
 
-      const verificationPayload = {
-        razorpay_order_id: orderId,
-        razorpay_payment_id: 'dummy_pay_' + Date.now(),
-        razorpay_signature: 'dummy_signature',
+            router.push('/dashboard')
+          } catch (err) {
+            showToast.dismiss(verifyLoader)
+            showToast.error(err.message || 'Verification failed on server.')
+          }
+        }
       }
+      
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response){
+        showToast.error(response.error.description || 'Payment Failed');
+      })
+      rzp.open();
 
-      const verifyRes = await paymentService.verifyPayment(verificationPayload)
-      showToast.dismiss(verifyLoader)
-      showToast.success('Payment verified! Your courses are now fully unlocked.')
-
-      if (verifyRes?.trainee) {
-        storage.setUser(verifyRes.trainee)
-        setUser(verifyRes.trainee)
-      }
-
-      router.push('/dashboard')
     } catch (error) {
       showToast.dismiss(initLoader)
-      showToast.error(error.message)
+      showToast.error(error.message || 'Could not initiate payment')
+    } finally {
       setIsProcessing(false)
     }
   }
@@ -69,6 +101,27 @@ export default function PaymentPage() {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
+  if (user.paymentStatus === 'paid') {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <Card className="shadow-lg p-8 text-center border-0">
+            <div className="w-20 h-20 bg-success-50 text-success-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <MdCheckCircle size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-neutral-900 mb-3">Payment Completed!</h2>
+            <p className="text-neutral-600 mb-8 leading-relaxed">
+              You have successfully paid <strong>{user?.trainingFeeSnapshot?.amount ? `₹${user.trainingFeeSnapshot.amount}` : "the fee"}</strong> for this course. Your training portal is officially unlocked!
+            </p>
+            <Button variant="primary" onClick={() => router.push('/dashboard')} className="w-full justify-center py-3 text-lg">
+              Proceed to Dashboard
+            </Button>
+          </Card>
+        </div>
       </div>
     )
   }
@@ -83,9 +136,9 @@ export default function PaymentPage() {
 
         <Card className="shadow-lg overflow-hidden">
           <div className="p-6 bg-gradient-to-br from-primary-600 to-primary-700 text-white">
-            <p className="text-primary-100 text-sm mb-1">HeyShishu Nanny Certification</p>
-            <h2 className="text-4xl font-extrabold">₹999</h2>
-            <p className="text-xs text-primary-200 mt-2">One-time payment for lifetime certification validity</p>
+            <p className="text-primary-100 text-sm mb-1">HeyShishu Certification</p>
+            <h2 className="text-3xl font-extrabold">{user?.trainingFeeSnapshot?.amount ? `₹${user.trainingFeeSnapshot.amount}` : "Complete Payment"}</h2>
+            <p className="text-xs text-primary-200 mt-2">One-time payment for lifetime validity</p>
           </div>
 
           <Card.Body className="space-y-4">
@@ -109,18 +162,27 @@ export default function PaymentPage() {
             <Button
               variant="primary"
               className="w-full justify-center py-3"
-              onClick={handleDummyPayment}
+              onClick={handlePayment}
               disabled={isProcessing}
             >
               <MdPayment size={20} className="mr-2" />
               {isProcessing ? 'Processing via Razorpay...' : 'Pay via Razorpay'}
             </Button>
-            <p className="text-center text-xs text-neutral-400 w-full">
+            
+            <button
+              className="w-full py-2 text-sm font-medium text-neutral-500 hover:text-neutral-800 transition-colors"
+              onClick={() => router.push('/dashboard')}
+              disabled={isProcessing}
+            >
+               Skip for now, go to Dashboard
+            </button>
+            <p className="text-center text-xs text-neutral-400 w-full mt-2">
               Secured by Razorpay • UPI, Cards, NetBanking supported
             </p>
           </Card.Footer>
         </Card>
       </div>
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
     </div>
   )
 }

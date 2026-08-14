@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@/context/AuthContext'
 import TraineeLayout from '@/components/common/TraineeLayout'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -119,6 +120,8 @@ function isTestCompleted(moduleData, moduleProgress) {
 
 function TestsPageContent() {
   const searchParams = useSearchParams()
+  const { user, loading: authLoading } = useAuth()
+  
   const courseId = searchParams.get('courseId')
   const moduleId = searchParams.get('moduleId')
   const mode = searchParams.get('mode')
@@ -136,6 +139,12 @@ function TestsPageContent() {
   const [isRequestingReview, setIsRequestingReview] = useState(false)
 
   useEffect(() => {
+    if (authLoading) return
+    if (!user || user.paymentStatus !== 'paid') {
+      setLoading(false)
+      return
+    }
+
     const fetchTestList = async () => {
       try {
         const data = await courseService.getAllCourses()
@@ -248,7 +257,7 @@ function TestsPageContent() {
     } else {
       fetchTestList()
     }
-  }, [courseId, moduleId, isRunnerMode])
+  }, [courseId, moduleId, isRunnerMode, authLoading, user])
 
   useEffect(() => {
     if (!isRunnerMode || mode === 'review') return

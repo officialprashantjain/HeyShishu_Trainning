@@ -1,3 +1,7 @@
 export default function TraineePortalLayout({ children }) {
-  return <>{children}</>
+  return (
+    <>
+      {children}
+    </>
+  )
 }

@@ -4,14 +4,17 @@ import { API_ENDPOINTS } from '../constants/endpoints';
 export const paymentService = {
   /**
    * Initiates the payment by creating an order securely on the backend.
-   * @param {number} amount Amount in paise (optional)
+   * @param {string} referenceId The Trainee ID
    */
-  initiatePayment: async (amount = 99900) => {
+  createOrder: async (referenceId) => {
     try {
-      const response = await axiosInstance.post(API_ENDPOINTS.PAYMENT.INITIATE, { amount });
+      const response = await axiosInstance.post(API_ENDPOINTS.PAYMENT.CREATE_ORDER, { 
+        moduleType: 'nanny_training',
+        referenceId 
+      });
       return response;
     } catch (error) {
-      throw new Error(error.response?.data?.message || 'Failed to initiate payment.');
+      throw new Error(error.response?.data?.message || 'Failed to create payment order.');
     }
   },
 

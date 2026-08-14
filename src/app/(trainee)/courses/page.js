@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/context/AuthContext'
 import TraineeLayout from '@/components/common/TraineeLayout'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -11,12 +12,19 @@ import { courseService } from '@/services/courseService'
 import { showToast } from '@/utils/toast'
 
 export default function CoursesPage() {
+  const { user, loading: authLoading } = useAuth()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [cycleStatus, setCycleStatus] = useState('training_in_progress')
   const [isRequesting, setIsRequesting] = useState(false)
 
   useEffect(() => {
+    if (authLoading) return
+    if (!user || user.paymentStatus !== 'paid') {
+      setLoading(false)
+      return
+    }
+
     const loadCourses = async () => {
       try {
         const data = await courseService.getAllCourses()
@@ -37,7 +45,7 @@ export default function CoursesPage() {
       }
     }
     loadCourses()
-  }, [])
+  }, [authLoading, user])
 
   if (loading) {
     return (
