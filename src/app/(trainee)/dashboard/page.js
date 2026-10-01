@@ -1,9 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import TraineeLayout from '@/components/common/TraineeLayout'
 import Card from '@/components/ui/Card'
 import Badge, { statusVariant, statusLabel } from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
+import meetingService from '@/services/meetingService'
 import {
   MdMenuBook,
   MdCheckCircle,
@@ -12,6 +15,8 @@ import {
   MdArrowForward,
   MdLock,
   MdPlayCircle,
+  MdVideocam,
+  MdCalendarToday,
 } from 'react-icons/md'
 import { FaGraduationCap } from 'react-icons/fa'
 
@@ -92,6 +97,19 @@ const courseStatusBadge = {
 }
 
 export default function DashboardPage() {
+  const [nextMeeting, setNextMeeting] = useState(null)
+
+  useEffect(() => {
+    meetingService
+      .getMyMeetings({ status: 'scheduled' })
+      .then((res) => {
+        const list = res?.data?.meetings || res?.meetings || res?.data || (Array.isArray(res) ? res : [])
+        const upcoming = list.find((m) => m.status === 'live' || m.status === 'scheduled')
+        if (upcoming) setNextMeeting(upcoming)
+      })
+      .catch(() => {})
+  }, [])
+
   const overallPct = Math.round(
     courses.reduce((sum, c) => sum + c.completed, 0) /
     courses.reduce((sum, c) => sum + c.modules, 0) *
@@ -110,6 +128,46 @@ export default function DashboardPage() {
           Heres an overview of your training progress.
         </p>
       </div>
+
+      {/* ── Upcoming Counselor Meeting Card (if scheduled) ─ */}
+      {nextMeeting && (
+        <Card padding="md" className="mb-6 bg-gradient-to-r from-primary-600 to-primary-800 border-0 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-white flex-shrink-0">
+                <MdVideocam size={26} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/20 text-white">
+                    {nextMeeting.status === 'live' ? '🔴 LIVE NOW' : 'Upcoming Session'}
+                  </span>
+                  <span className="text-xs text-white/80 capitalize">
+                    {nextMeeting.meetingType?.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <h3 className="text-white text-base font-bold">{nextMeeting.title}</h3>
+                <p className="text-white/80 text-xs flex items-center gap-2 mt-1">
+                  <MdCalendarToday size={14} />
+                  <span>
+                    {new Date(nextMeeting.scheduledAt).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
+                  {nextMeeting.counselorId?.name && ` • Counselor: ${nextMeeting.counselorId.name}`}
+                </p>
+              </div>
+            </div>
+
+            <Link href={`/meetings/${nextMeeting._id}/room`}>
+              <Button variant="secondary" size="md" iconRight={<MdArrowForward />} className="shadow-lg whitespace-nowrap">
+                {nextMeeting.status === 'live' ? 'Join Live Meeting' : 'Join Meeting'}
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      )}
 
       {/* ── Status banner ─────────────────────────────────── */}
       <Card padding="md" className="mb-6 bg-gradient-to-r from-dark-900 to-dark-800 border-0 text-white">

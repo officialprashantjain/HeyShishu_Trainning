@@ -9,6 +9,7 @@ import {
   MdRateReview,
   MdPayment,
   MdLogout,
+  MdVideocam,
 } from 'react-icons/md'
 import { FaGraduationCap } from 'react-icons/fa'
 
@@ -32,6 +33,11 @@ const navItems = [
     label: 'My Review',
     href:  '/review',
     icon:  <MdRateReview size={20} />,
+  },
+  {
+    label: 'Meetings',
+    href:  '/meetings',
+    icon:  <MdVideocam size={20} />,
   },
   {
     label: 'Payment',
