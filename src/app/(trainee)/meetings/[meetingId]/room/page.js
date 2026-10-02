@@ -140,7 +140,7 @@ export default function TraineeMeetingRoomPage({ params }) {
   }
 
   return (
-    <AgoraProvider meetingId={meetingId}>
+    <AgoraProvider meetingId={meetingId} meetingTitle={meeting.title}>
       <div className="h-screen w-screen bg-dark-950 text-white overflow-hidden flex flex-col">
         <TraineeRoomClient meeting={meeting} />
       </div>
