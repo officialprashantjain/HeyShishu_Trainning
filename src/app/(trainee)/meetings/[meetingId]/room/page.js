@@ -133,7 +133,7 @@ export default function TraineeMeetingRoomPage({ params }) {
           href="/meetings"
           className="px-5 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white font-semibold text-sm transition-all border border-white/10"
         >
-          Back to Meetings
+          Back to Meetings.
         </Link>
       </div>
     );
