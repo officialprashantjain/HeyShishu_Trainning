@@ -26,6 +26,8 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
   const localAudioTrackRef = useRef(null);
   const localVideoTrackRef = useRef(null);
   const isLeavingRef = useRef(false);
+  // Guard: prevent double-join caused by React Strict Mode double-invoking useEffect
+  const hasJoinedRef = useRef(false);
 
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
@@ -44,6 +46,10 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
   const [isPiPActive, setIsPiPActive] = useState(false);
 
   useEffect(() => {
+    // Prevent double-join: if already joined (e.g. React Strict Mode remount), bail out
+    if (hasJoinedRef.current) return;
+    hasJoinedRef.current = true;
+
     let mounted = true;
 
     const join = async () => {
@@ -177,6 +183,8 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
 
     return () => {
       mounted = false;
+      // Reset join guard so a true meetingId change can rejoin
+      hasJoinedRef.current = false;
       if (pipWindowRef.current && !pipWindowRef.current.closed) {
         try {
           pipWindowRef.current.close();
