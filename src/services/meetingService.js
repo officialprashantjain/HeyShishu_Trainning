@@ -20,7 +20,7 @@ const meetingService = {
    */
   getAgoraToken: async (meetingId) => {
     const res = await axiosInstance.post(`/meetings/${meetingId}/token`);
-    return res.data;
+    return res?.data?.data ?? res?.data ?? res;
   },
 };
 

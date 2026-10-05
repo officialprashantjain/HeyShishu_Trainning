@@ -79,9 +79,21 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
           window.addEventListener('touchstart', resumeAudio);
         };
 
-        // 3. Create Client
-        const client = AgoraRTCModule.createClient({ codec: 'vp8', mode: 'rtc' });
+        // 3. Create Client with correct mode:
+        //   • 'rtc'  → one_to_one / group  (up to 128 publishers, bidirectional)
+        //   • 'live' → webinar             (counselor = host/publisher, trainee = audience)
+        const isWebinar = (tokenData.meetingType || '') === 'webinar';
+        const client = AgoraRTCModule.createClient({
+          codec: 'vp8',
+          mode: isWebinar ? 'live' : 'rtc',
+        });
         clientRef.current = client;
+
+        // For webinar: MUST set clientRole BEFORE joining the channel
+        // Backend returns agoraRole: 'host' for counselor co-hosts, 'audience' for trainees/nannies
+        if (isWebinar) {
+          await client.setClientRole(role === 'audience' ? 'audience' : 'host');
+        }
 
         // 4. Handle Remote Users
         client.on('user-published', async (user, mediaType) => {

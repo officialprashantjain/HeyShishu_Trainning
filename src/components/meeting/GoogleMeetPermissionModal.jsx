@@ -1,6 +1,6 @@
 'use client';
-
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MdMic,
   MdVideocam,
@@ -8,6 +8,8 @@ import {
   MdTune,
   MdWarningAmber,
 } from 'react-icons/md';
+
+const emptySubscribe = () => () => {};
 
 export default function GoogleMeetPermissionModal({
   isOpen,
@@ -17,10 +19,12 @@ export default function GoogleMeetPermissionModal({
   onUseMic,
   onUseMicAndCamera,
 }) {
-  if (!isOpen) return null;
+  const isMounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+  if (!isOpen || !isMounted || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="relative w-full max-w-[440px] rounded-3xl bg-white text-slate-900 shadow-2xl p-7 overflow-hidden border border-slate-100">
         {/* Close Button */}
         <button
@@ -144,6 +148,7 @@ export default function GoogleMeetPermissionModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -115,7 +115,7 @@ export default function TraineeMeetingRoomPage({ params }) {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen bg-dark-950 flex flex-col items-center justify-center gap-3">
+      <div className="h-screen w-full max-w-full bg-dark-950 flex flex-col items-center justify-center gap-3">
         <div className="w-12 h-12 border-4 border-primary-500/20 border-t-primary-500 rounded-full animate-spin" />
         <p className="text-neutral-400 text-sm font-medium">Preparing meeting room…</p>
       </div>
@@ -124,7 +124,7 @@ export default function TraineeMeetingRoomPage({ params }) {
 
   if (error || !meeting) {
     return (
-      <div className="h-screen w-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center gap-4">
+      <div className="h-screen w-full max-w-full bg-dark-950 flex flex-col items-center justify-center p-6 text-center gap-4">
         <div className="w-14 h-14 rounded-2xl bg-danger-500/10 text-danger-400 flex items-center justify-center">
           <MdErrorOutline size={32} />
         </div>
@@ -141,7 +141,7 @@ export default function TraineeMeetingRoomPage({ params }) {
 
   return (
     <AgoraProvider meetingId={meetingId} meetingTitle={meeting.title}>
-      <div className="h-screen w-screen bg-dark-950 text-white overflow-hidden flex flex-col">
+      <div className="h-screen w-full max-w-full bg-dark-950 text-white overflow-hidden flex flex-col">
         <TraineeRoomClient meeting={meeting} />
       </div>
     </AgoraProvider>
