@@ -23,6 +23,9 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
   const clientRef = useRef(null);
   const agoraModuleRef = useRef(null);
   const pipWindowRef = useRef(null);
+  const localAudioTrackRef = useRef(null);
+  const localVideoTrackRef = useRef(null);
+  const isLeavingRef = useRef(false);
 
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
@@ -31,6 +34,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
   const [isJoining, setIsJoining] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [joinError, setJoinError] = useState(null);
   const [agoraRole, setAgoraRole] = useState('host');
 
@@ -90,28 +94,14 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
           setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
         });
 
-        // 5. Join Agora Channel FIRST — guarantees user enters room and hears remote audio
-        try {
-          await client.join(
-            tokenData.agoraAppId,
-            tokenData.channelName,
-            tokenData.token,
-            tokenData.uid
-          );
-        } catch (joinErr) {
-          if (joinErr?.code === 'UID_CONFLICT' || joinErr?.message?.includes('UID_CONFLICT')) {
-            console.warn('[Agora RTC] UID conflict detected. Automatically acquiring fresh session UID...');
-            const freshTokenData = await meetingService.getAgoraToken(meetingId);
-            await client.join(
-              freshTokenData.agoraAppId,
-              freshTokenData.channelName,
-              freshTokenData.token,
-              freshTokenData.uid
-            );
-          } else {
-            throw joinErr;
-          }
-        }
+        // 5. Join Agora Channel with null so Agora automatically generates a unique UID per session.
+        // This guarantees no UID_CONFLICT even on instant rejoin or refresh!
+        await client.join(
+          tokenData.agoraAppId,
+          tokenData.channelName,
+          tokenData.token,
+          null
+        );
 
         if (mounted) {
           setIsJoined(true);
@@ -123,6 +113,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
           try {
             const audioTrack = await AgoraRTCModule.createMicrophoneAudioTrack();
             await client.publish([audioTrack]);
+            localAudioTrackRef.current = audioTrack;
             if (mounted) {
               setLocalAudioTrack(audioTrack);
               setIsMicOn(true);
@@ -131,6 +122,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
           } catch (audioErr) {
             console.warn('Microphone permission or hardware not available on join:', audioErr);
             if (mounted) {
+              localAudioTrackRef.current = null;
               setLocalAudioTrack(null);
               setIsMicOn(false);
               if (audioErr?.name === 'NotAllowedError' || audioErr?.message?.includes('Permission denied')) {
@@ -147,6 +139,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
               encoderConfig: '480p_1',
             });
             await client.publish([videoTrack]);
+            localVideoTrackRef.current = videoTrack;
             if (mounted) {
               setLocalVideoTrack(videoTrack);
               setIsCameraOn(true);
@@ -155,6 +148,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
           } catch (videoErr) {
             console.warn('Camera permission or hardware not available on join:', videoErr);
             if (mounted) {
+              localVideoTrackRef.current = null;
               setLocalVideoTrack(null);
               setIsCameraOn(false);
               if (videoErr?.name === 'NotAllowedError' || videoErr?.message?.includes('Permission denied')) {
@@ -181,17 +175,31 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
 
     join();
 
-    const handleBeforeUnload = () => {
-      clientRef.current?.leave().catch(() => {});
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
     return () => {
       mounted = false;
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (pipWindowRef.current && !pipWindowRef.current.closed) {
-        pipWindowRef.current.close();
+        try {
+          pipWindowRef.current.close();
+        } catch {}
+        pipWindowRef.current = null;
       }
+      const aTrack = localAudioTrackRef.current;
+      const vTrack = localVideoTrackRef.current;
+      if (aTrack) {
+        try {
+          aTrack.stop();
+          aTrack.close();
+          aTrack.getMediaStreamTrack()?.stop();
+        } catch {}
+      }
+      if (vTrack) {
+        try {
+          vTrack.stop();
+          vTrack.close();
+          vTrack.getMediaStreamTrack()?.stop();
+        } catch {}
+      }
+      clientRef.current?.unpublish().catch(() => {});
       clientRef.current?.leave().catch(() => {});
     };
   }, [meetingId]);
@@ -203,13 +211,14 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
       const client = clientRef.current;
       if (!AgoraRTCModule || !client) return false;
 
-      let micSuccess = !!localAudioTrack;
-      let cameraSuccess = !!localVideoTrack;
+      let micSuccess = !!localAudioTrackRef.current;
+      let cameraSuccess = !!localVideoTrackRef.current;
 
-      if ((device === 'mic' || device === 'both') && !localAudioTrack) {
+      if ((device === 'mic' || device === 'both') && !localAudioTrackRef.current) {
         try {
           const audio = await AgoraRTCModule.createMicrophoneAudioTrack();
           await client.publish([audio]);
+          localAudioTrackRef.current = audio;
           setLocalAudioTrack(audio);
           setIsMicOn(true);
           setMicPermission('granted');
@@ -224,12 +233,13 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         }
       }
 
-      if ((device === 'camera' || device === 'both') && !localVideoTrack) {
+      if ((device === 'camera' || device === 'both') && !localVideoTrackRef.current) {
         try {
           const video = await AgoraRTCModule.createCameraVideoTrack({
             encoderConfig: '480p_1',
           });
           await client.publish([video]);
+          localVideoTrackRef.current = video;
           setLocalVideoTrack(video);
           setIsCameraOn(true);
           setCameraPermission('granted');
@@ -247,13 +257,14 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
       setPermissionModal(null);
       return micSuccess || cameraSuccess;
     },
-    [localAudioTrack, localVideoTrack]
+    []
   );
 
   const toggleMic = useCallback(async () => {
-    if (localAudioTrack) {
+    const track = localAudioTrackRef.current;
+    if (track) {
       const nextState = !isMicOn;
-      await localAudioTrack.setEnabled(nextState);
+      await track.setEnabled(nextState);
       setIsMicOn(nextState);
     } else {
       if (micPermission === 'denied') {
@@ -262,12 +273,13 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         setPermissionModal({ open: true, type: 'prompt', device: 'mic' });
       }
     }
-  }, [localAudioTrack, isMicOn, micPermission]);
+  }, [isMicOn, micPermission]);
 
   const toggleCamera = useCallback(async () => {
-    if (localVideoTrack) {
+    const track = localVideoTrackRef.current;
+    if (track) {
       const nextState = !isCameraOn;
-      await localVideoTrack.setEnabled(nextState);
+      await track.setEnabled(nextState);
       setIsCameraOn(nextState);
     } else {
       if (cameraPermission === 'denied') {
@@ -276,19 +288,80 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         setPermissionModal({ open: true, type: 'prompt', device: 'camera' });
       }
     }
-  }, [localVideoTrack, isCameraOn, cameraPermission]);
+  }, [isCameraOn, cameraPermission]);
 
+  // ── Cut / Leave Room (Hardware & Channel Teardown) ───────────────────────
   const leave = useCallback(async () => {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    setIsLeaving(true);
+
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
-      pipWindowRef.current.close();
+      try {
+        pipWindowRef.current.close();
+      } catch {}
+      pipWindowRef.current = null;
     }
-    localVideoTrack?.stop();
-    localVideoTrack?.close();
-    localAudioTrack?.stop();
-    localAudioTrack?.close();
-    await clientRef.current?.leave();
+    setIsPiPActive(false);
+
+    const client = clientRef.current;
+    const audioTrack = localAudioTrackRef.current;
+    const videoTrack = localVideoTrackRef.current;
+
+    if (client) {
+      try {
+        const tracks = [audioTrack, videoTrack].filter(Boolean);
+        if (tracks.length > 0) {
+          await client.unpublish(tracks);
+        }
+      } catch (err) {
+        console.warn('Agora unpublish error:', err);
+      }
+    }
+
+    try {
+      if (audioTrack) {
+        audioTrack.stop();
+        audioTrack.close();
+        audioTrack.getMediaStreamTrack()?.stop();
+      }
+    } catch (err) {
+      console.warn('Audio track close error:', err);
+    }
+
+    try {
+      if (videoTrack) {
+        videoTrack.stop();
+        videoTrack.close();
+        videoTrack.getMediaStreamTrack()?.stop();
+      }
+    } catch (err) {
+      console.warn('Video track close error:', err);
+    }
+
+    localAudioTrackRef.current = null;
+    localVideoTrackRef.current = null;
+    setLocalAudioTrack(null);
+    setLocalVideoTrack(null);
+    setIsMicOn(false);
+    setIsCameraOn(false);
+
+    if (client) {
+      try {
+        await client.leave();
+      } catch (err) {
+        console.warn('Agora client leave error:', err);
+      }
+      client.removeAllListeners();
+      clientRef.current = null;
+    }
+
     setIsJoined(false);
-  }, [localVideoTrack, localAudioTrack]);
+
+    if (typeof window !== 'undefined') {
+      window.location.href = '/meetings';
+    }
+  }, []);
 
   // ── Document Picture-in-Picture (PiP) Implementation ─────────────────────
   const openDocumentPiP = useCallback(async () => {
@@ -469,9 +542,11 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         background: #ef4444;
       `;
       endBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></svg>`;
+
       endBtn.onclick = async () => {
+        endBtn.setAttribute('disabled', 'true');
+        endBtn.style.opacity = '0.5';
         await leave();
-        pipWin.close();
       };
 
       bottomBar.appendChild(micBtn);
@@ -493,8 +568,9 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         `;
       }
 
-      if (localVideoTrack && isCameraOn) {
-        localVideoTrack.play(localInset);
+      const vTrack = localVideoTrackRef.current;
+      if (vTrack && isCameraOn) {
+        vTrack.play(localInset);
       } else {
         localInset.innerHTML = `
           <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:10px;">
@@ -510,7 +586,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
     } catch (err) {
       console.warn('Failed to open Document PiP:', err);
     }
-  }, [meetingTitle, isMicOn, isCameraOn, toggleMic, toggleCamera, leave, remoteUsers, localVideoTrack]);
+  }, [meetingTitle, isMicOn, isCameraOn, toggleMic, toggleCamera, leave, remoteUsers]);
 
   const togglePiP = useCallback(async () => {
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
@@ -522,24 +598,6 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
     }
   }, [openDocumentPiP]);
 
-  // Tab switch listener: automatic Picture-in-Picture trigger when user switches tab or minimizes
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'hidden' && isJoined) {
-        if ('documentPictureInPicture' in window && !pipWindowRef.current) {
-          try {
-            await openDocumentPiP();
-          } catch {
-            // Browser may require user gesture for initial window creation
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isJoined, openDocumentPiP]);
-
   return (
     <AgoraContext.Provider
       value={{
@@ -550,6 +608,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         isCameraOn,
         isJoined,
         isJoining,
+        isLeaving,
         joinError,
         agoraRole,
         micPermission,

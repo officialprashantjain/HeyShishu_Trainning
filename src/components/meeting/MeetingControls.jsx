@@ -13,7 +13,6 @@ import {
 } from 'react-icons/md';
 
 export default function MeetingControls({ meetingTitle }) {
-  const router = useRouter();
   const {
     isMicOn,
     isCameraOn,
@@ -25,13 +24,14 @@ export default function MeetingControls({ meetingTitle }) {
     toggleCamera,
     togglePiP,
     isPiPActive,
+    isLeaving,
     leave,
     agoraRole,
   } = useAgora();
 
   const handleLeave = async () => {
+    if (isLeaving) return;
     await leave();
-    router.push('/meetings');
   };
 
   const isMicBlockedOrUnallowed = !localAudioTrack || micPermission === 'denied';
@@ -129,11 +129,14 @@ export default function MeetingControls({ meetingTitle }) {
         {/* Leave Button */}
         <button
           onClick={handleLeave}
-          title="Leave Meeting"
-          className="px-5 h-12 rounded-2xl bg-danger-500 hover:bg-danger-600 text-white font-semibold text-sm flex items-center gap-2 shadow-lg shadow-danger-500/20 transition-all cursor-pointer"
+          disabled={isLeaving}
+          title={isLeaving ? 'Leaving Room...' : 'Leave Meeting'}
+          className={`px-5 h-12 rounded-2xl bg-danger-500 hover:bg-danger-600 text-white font-semibold text-sm flex items-center gap-2 shadow-lg shadow-danger-500/20 transition-all cursor-pointer ${
+            isLeaving ? 'opacity-60 cursor-not-allowed' : ''
+          }`}
         >
-          <MdCallEnd size={20} />
-          <span>Leave Room</span>
+          <MdCallEnd size={20} className={isLeaving ? 'animate-pulse' : ''} />
+          <span>{isLeaving ? 'Leaving...' : 'Leave Room'}</span>
         </button>
       </div>
 
