@@ -22,6 +22,30 @@ const meetingService = {
     const res = await axiosInstance.post(`/meetings/${meetingId}/token`);
     return res?.data?.data ?? res?.data ?? res;
   },
+
+  /**
+   * Start screen sharing (get dedicated screen token + UID)
+   */
+  startScreenShare: async (meetingId) => {
+    const res = await axiosInstance.post(`/meetings/${meetingId}/screenshare/start`);
+    return res?.data?.data ?? res?.data ?? res;
+  },
+
+  /**
+   * Stop screen sharing
+   */
+  stopScreenShare: async (meetingId) => {
+    const res = await axiosInstance.post(`/meetings/${meetingId}/screenshare/stop`);
+    return res?.data?.data ?? res?.data ?? res;
+  },
+
+  /**
+   * Get screen share status
+   */
+  getScreenShareStatus: async (meetingId) => {
+    const res = await axiosInstance.get(`/meetings/${meetingId}/screenshare/status`);
+    return res?.data?.data ?? res?.data ?? res;
+  },
 };
 
 export default meetingService;

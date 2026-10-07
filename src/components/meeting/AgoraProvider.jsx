@@ -45,6 +45,16 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
   const [permissionModal, setPermissionModal] = useState(null);
   const [isPiPActive, setIsPiPActive] = useState(false);
 
+  // Screen Share State & Refs
+  const screenClientRef = useRef(null);
+  const screenTrackRef = useRef(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [localScreenTrack, setLocalScreenTrack] = useState(null);
+  const [remoteScreenUser, setRemoteScreenUser] = useState(null);
+  const [remoteScreenTrack, setRemoteScreenTrack] = useState(null);
+  const [meetingType, setMeetingType] = useState('one_to_one');
+  const isSomeoneElseSharing = Boolean(remoteScreenUser);
+
   useEffect(() => {
     // Prevent double-join: if already joined (e.g. React Strict Mode remount), bail out
     if (hasJoinedRef.current) return;
@@ -60,7 +70,11 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         // 1. Get token from backend
         const tokenData = await meetingService.getAgoraToken(meetingId);
         const role = tokenData.agoraRole || 'host';
-        if (mounted) setAgoraRole(role);
+        const mType = tokenData.meetingType || 'one_to_one';
+        if (mounted) {
+          setAgoraRole(role);
+          setMeetingType(mType);
+        }
 
         // 2. Dynamically import Agora SDK for Web (prevents SSR window issue)
         const AgoraRTCModule = (await import('agora-rtc-sdk-ng')).default;
@@ -82,7 +96,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         // 3. Create Client with correct mode:
         //   • 'rtc'  → one_to_one / group  (up to 128 publishers, bidirectional)
         //   • 'live' → webinar             (counselor = host/publisher, trainee = audience)
-        const isWebinar = (tokenData.meetingType || '') === 'webinar';
+        const isWebinar = mType === 'webinar';
         const client = AgoraRTCModule.createClient({
           codec: 'vp8',
           mode: isWebinar ? 'live' : 'rtc',
@@ -98,27 +112,51 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         // 4. Handle Remote Users
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
-          setRemoteUsers((prev) => {
-            const exists = prev.find((u) => u.uid === user.uid);
-            return exists ? prev.map((u) => (u.uid === user.uid ? user : u)) : [...prev, user];
-          });
+
+          // Dedicated screen sharing UID check (UID >= 900,000,000)
+          if (Number(user.uid) >= 900000000) {
+            if (mediaType === 'video') {
+              setRemoteScreenUser(user);
+              setRemoteScreenTrack(user.videoTrack || null);
+            }
+            if (mediaType === 'audio') {
+              user.audioTrack?.play();
+            }
+          } else {
+            setRemoteUsers((prev) => {
+              const exists = prev.find((u) => u.uid === user.uid);
+              return exists ? prev.map((u) => (u.uid === user.uid ? user : u)) : [...prev, user];
+            });
+          }
         });
 
-        client.on('user-unpublished', (user) => {
-          setRemoteUsers((prev) => prev.map((u) => (u.uid === user.uid ? user : u)));
+        client.on('user-unpublished', (user, mediaType) => {
+          if (Number(user.uid) >= 900000000) {
+            if (mediaType === 'video') {
+              setRemoteScreenUser(null);
+              setRemoteScreenTrack(null);
+            }
+          } else {
+            setRemoteUsers((prev) => prev.map((u) => (u.uid === user.uid ? user : u)));
+          }
         });
 
         client.on('user-left', (user) => {
-          setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+          if (Number(user.uid) >= 900000000) {
+            setRemoteScreenUser(null);
+            setRemoteScreenTrack(null);
+          } else {
+            setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+          }
         });
 
-        // 5. Join Agora Channel with null so Agora automatically generates a unique UID per session.
-        // This guarantees no UID_CONFLICT even on instant rejoin or refresh!
+        // 5. Join Agora Channel with UID from backend or auto-assigned
+        const mainUid = tokenData.userAgoraUid || null;
         await client.join(
           tokenData.agoraAppId,
           tokenData.channelName,
           tokenData.token,
-          null
+          mainUid
         );
 
         if (mounted) {
@@ -310,11 +348,134 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
     }
   }, [isCameraOn, cameraPermission]);
 
+  // ── Screen Sharing Controls ──────────────────────────────────────────
+  const stopScreenShare = useCallback(async () => {
+    try {
+      if (screenTrackRef.current) {
+        screenTrackRef.current.stop();
+        screenTrackRef.current.close();
+        screenTrackRef.current = null;
+      }
+      if (screenClientRef.current) {
+        await screenClientRef.current.leave();
+        screenClientRef.current.removeAllListeners();
+        screenClientRef.current = null;
+      }
+    } catch (err) {
+      console.warn('Error stopping screen share:', err);
+    } finally {
+      setIsScreenSharing(false);
+      setLocalScreenTrack(null);
+      await meetingService.stopScreenShare(meetingId).catch(() => {});
+    }
+  }, [meetingId]);
+
+  const startScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      await stopScreenShare();
+      return;
+    }
+
+    if (meetingType === 'webinar') {
+      alert('Screen sharing is not permitted for attendees in webinar sessions.');
+      return;
+    }
+
+    if (remoteScreenUser) {
+      alert('Another participant is currently sharing their screen. Only one screen share is allowed at a time. Please ask them to stop first.');
+      return;
+    }
+
+    try {
+      // 1. Request backend permission and dedicated screen token
+      const res = await meetingService.startScreenShare(meetingId);
+      const { screenUid, screenToken, channelName, agoraAppId } = res;
+
+      // 2. Dynamic AgoraRTC import
+      const AgoraRTCModule = agoraModuleRef.current || (await import('agora-rtc-sdk-ng')).default;
+
+      // 3. Create screen video track
+      let screenVideo;
+      let screenAudio = null;
+
+      try {
+        const result = await AgoraRTCModule.createScreenVideoTrack(
+          {
+            encoderConfig: '1080p_1',
+            optimizationMode: 'detail',
+          },
+          'auto'
+        );
+
+        if (Array.isArray(result)) {
+          screenVideo = result[0];
+          screenAudio = result[1];
+        } else {
+          screenVideo = result;
+        }
+      } catch (pickerErr) {
+        console.info('Screen share cancelled by user:', pickerErr);
+        await meetingService.stopScreenShare(meetingId).catch(() => {});
+        return;
+      }
+
+      screenTrackRef.current = screenVideo;
+
+      // 4. Create secondary Agora RTC client
+      const screenClient = AgoraRTCModule.createClient({
+        codec: 'vp8',
+        mode: meetingType === 'webinar' ? 'live' : 'rtc',
+      });
+      screenClientRef.current = screenClient;
+
+      // 5. Join with dedicated screenUid
+      await screenClient.join(agoraAppId, channelName, screenToken, screenUid);
+
+      // 6. Publish
+      const tracksToPublish = screenAudio ? [screenVideo, screenAudio] : [screenVideo];
+      await screenClient.publish(tracksToPublish);
+
+      // 7. Auto-stop on native browser bar click
+      screenVideo.on('track-ended', () => {
+        stopScreenShare();
+      });
+
+      setIsScreenSharing(true);
+      setLocalScreenTrack(screenVideo);
+    } catch (err) {
+      console.error('Failed to start screen share:', err);
+      const msg = err.response?.data?.message || err.message || 'Failed to start screen sharing';
+      alert(msg);
+      await stopScreenShare();
+    }
+  }, [isScreenSharing, remoteScreenUser, meetingId, meetingType, stopScreenShare]);
+
   // ── Cut / Leave Room (Hardware & Channel Teardown) ───────────────────────
   const leave = useCallback(async () => {
     if (isLeavingRef.current) return;
     isLeavingRef.current = true;
     setIsLeaving(true);
+
+    // 0. Stop screen sharing if active
+    if (screenTrackRef.current || screenClientRef.current) {
+      try {
+        if (screenTrackRef.current) {
+          screenTrackRef.current.stop();
+          screenTrackRef.current.close();
+        }
+        if (screenClientRef.current) {
+          await screenClientRef.current.leave();
+          screenClientRef.current.removeAllListeners();
+        }
+        await meetingService.stopScreenShare(meetingId).catch(() => {});
+      } catch (err) {
+        console.warn('Error closing screen share on leave:', err);
+      }
+      screenTrackRef.current = null;
+      screenClientRef.current = null;
+      setIsScreenSharing(false);
+      setLocalScreenTrack(null);
+    }
 
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       try {
@@ -381,7 +542,7 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
     if (typeof window !== 'undefined') {
       window.location.href = '/meetings';
     }
-  }, []);
+  }, [meetingId]);
 
   // ── Document Picture-in-Picture (PiP) Implementation ─────────────────────
   const openDocumentPiP = useCallback(async () => {
@@ -639,7 +800,14 @@ export default function AgoraProvider({ meetingId, meetingTitle = 'Trainee Meeti
         toggleMic,
         toggleCamera,
         togglePiP,
-        requestDevicePermission,
+        meetingType,
+        isScreenSharing,
+        localScreenTrack,
+        remoteScreenUser,
+        remoteScreenTrack,
+        isSomeoneElseSharing,
+        startScreenShare,
+        stopScreenShare,
         leave,
       }}
     >

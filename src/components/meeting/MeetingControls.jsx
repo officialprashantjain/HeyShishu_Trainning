@@ -10,6 +10,8 @@ import {
   MdVideocamOff,
   MdCallEnd,
   MdPictureInPictureAlt,
+  MdScreenShare,
+  MdStopScreenShare,
 } from 'react-icons/md';
 
 export default function MeetingControls({ meetingTitle }) {
@@ -27,6 +29,11 @@ export default function MeetingControls({ meetingTitle }) {
     isLeaving,
     leave,
     agoraRole,
+    meetingType,
+    isScreenSharing,
+    isSomeoneElseSharing,
+    startScreenShare,
+    stopScreenShare,
   } = useAgora();
 
   const handleLeave = async () => {
@@ -113,6 +120,30 @@ export default function MeetingControls({ meetingTitle }) {
           </>
         )}
 
+        {/* Screen Share Button — allowed only in one_to_one or group, NOT webinar */}
+        {meetingType !== 'webinar' && agoraRole !== 'audience' && (
+          <button
+            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+            disabled={!isScreenSharing && isSomeoneElseSharing}
+            title={
+              isScreenSharing
+                ? 'Stop sharing your screen'
+                : isSomeoneElseSharing
+                ? 'Another participant is currently sharing their screen. Only one screen share is allowed at a time.'
+                : 'Share your screen'
+            }
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer relative ${
+              isScreenSharing
+                ? 'bg-emerald-600 text-white animate-pulse shadow-lg shadow-emerald-600/30'
+                : isSomeoneElseSharing
+                ? 'bg-dark-800 text-neutral-600 border border-white/5 cursor-not-allowed opacity-50'
+                : 'bg-dark-800 text-white hover:bg-dark-700 border border-white/10'
+            }`}
+          >
+            {isScreenSharing ? <MdStopScreenShare size={22} /> : <MdScreenShare size={22} />}
+          </button>
+        )}
+
         {/* Picture-in-Picture Floating Pop-up Window */}
         <button
           onClick={togglePiP}
@@ -140,8 +171,20 @@ export default function MeetingControls({ meetingTitle }) {
         </button>
       </div>
 
-      {/* Right spacer / PiP status */}
-      <div className="hidden sm:flex items-center justify-end">
+      {/* Right: Screen Share & PiP status */}
+      <div className="hidden sm:flex items-center justify-end gap-2">
+        {isScreenSharing && (
+          <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Sharing Screen
+          </span>
+        )}
+        {!isScreenSharing && isSomeoneElseSharing && (
+          <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+            Screen Share Active
+          </span>
+        )}
         {isPiPActive && (
           <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-full flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />

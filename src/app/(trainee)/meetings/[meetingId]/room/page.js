@@ -7,6 +7,7 @@ import meetingService from '@/services/meetingService';
 import AgoraProvider, { useAgora } from '@/components/meeting/AgoraProvider';
 import LocalVideoView from '@/components/meeting/LocalVideoView';
 import RemoteVideoGrid from '@/components/meeting/RemoteVideoGrid';
+import ScreenShareStage from '@/components/meeting/ScreenShareStage';
 import MeetingControls from '@/components/meeting/MeetingControls';
 import {
   MdArrowBack,
@@ -15,7 +16,7 @@ import {
 } from 'react-icons/md';
 
 function TraineeRoomClient({ meeting }) {
-  const { isJoining, joinError } = useAgora();
+  const { isJoining, joinError, isScreenSharing, remoteScreenUser } = useAgora();
 
   if (isJoining) {
     return (
@@ -76,12 +77,18 @@ function TraineeRoomClient({ meeting }) {
       </div>
 
       {/* Main Video Stage */}
-      <div className="relative flex-1 p-4 bg-dark-950 overflow-hidden">
-        {/* Remote Stream Grid (Counselor / Presenter) */}
-        <RemoteVideoGrid className="h-full" />
+      <div className="relative flex-1 p-4 bg-dark-950 overflow-hidden min-h-0 min-w-0">
+        {isScreenSharing || remoteScreenUser ? (
+          <ScreenShareStage className="h-full w-full" />
+        ) : (
+          <>
+            {/* Remote Stream Grid (Counselor / Presenter) */}
+            <RemoteVideoGrid className="h-full" />
 
-        {/* Local Self-View PIP */}
-        <LocalVideoView className="absolute bottom-6 right-6 w-48 h-36 shadow-2xl z-20" />
+            {/* Local Self-View PIP */}
+            <LocalVideoView className="absolute bottom-6 right-6 w-48 h-36 shadow-2xl z-20" />
+          </>
+        )}
       </div>
 
       {/* Control Bar */}
