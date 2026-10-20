@@ -77,17 +77,17 @@ function TraineeRoomClient({ meeting }) {
       </div>
 
       {/* Main Video Stage */}
-      <div className="relative flex-1 p-4 bg-dark-950 overflow-hidden min-h-0 min-w-0">
+      <div className="relative flex-1 p-3 sm:p-4 bg-dark-950 overflow-hidden min-h-0 min-w-0 flex flex-col">
         {isScreenSharing || remoteScreenUser ? (
           <ScreenShareStage className="h-full w-full" />
         ) : (
-          <>
+          <div className="relative w-full h-full min-h-0 min-w-0 flex-1">
             {/* Remote Stream Grid (Counselor / Presenter) */}
-            <RemoteVideoGrid className="h-full" />
+            <RemoteVideoGrid className="h-full w-full" />
 
             {/* Local Self-View PIP */}
-            <LocalVideoView className="absolute bottom-6 right-6 w-48 h-36 shadow-2xl z-20" />
-          </>
+            <LocalVideoView className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 w-32 h-24 sm:w-48 sm:h-36 shadow-2xl z-20 pointer-events-auto" />
+          </div>
         )}
       </div>
 
